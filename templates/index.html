@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CVRP Solver</title>
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ api_key }}"></script>
+    <script src="/static/main.js"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <h2>CVRP Solver</h2>
+    <label>Truck Capacity: <input type="number" id="capacityInput" /></label>
+    <button onclick="solveCVRP()">Solve</button>
+    <div id="map" style="height: 600px; width: 100%;"></div>
+</body>
+</html>
