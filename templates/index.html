@@ -1,16 +1,30 @@
 <!DOCTYPE html>
 <html>
-<head>
+  <head>
     <title>CVRP Solver</title>
-    <script src="https://maps.googleapis.com/maps/api/js?key={{ api_key }}&libraries=marker"></script>
-
-    <script src="/static/main.js"></script>
     <link rel="stylesheet" href="/static/styles.css">
-</head>
-<body onload="initMap()">
+    <script src="/static/main.js" defer></script>
+
+  </head>
+  <body>
     <h2>CVRP Solver</h2>
     <label>Truck Capacity: <input type="number" id="capacityInput" /></label>
     <button onclick="solveCVRP()">Solve</button>
-    <div id="map" style="height: 600px; width: 100%;"></div>
-</body>
+    <div class="mid">
+      <div id="map" style="height: 70vh; width: 80vw;"></div>
+      <div id="markers"></div>
+    </div>
+  
+    <div id="algorithmSelector" class="algorithm-selector">
+      <div class="algo-box selected" data-algo="nearest">Nearest Neighbour</div>
+      <div class="algo-box" data-algo="clarke-wright">Clark-Wright</div>
+      <div class="algo-box" data-algo="google">Google Algorithm</div>
+    </div>
+    
+    <script
+    src="https://maps.googleapis.com/maps/api/js?key={{ api_key }}&libraries=marker&callback=initMap"
+    async
+    defer
+  ></script>
+  </body>
 </html>

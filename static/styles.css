@@ -1,0 +1,52 @@
+.algorithm-selector {
+    display: flex;
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  
+  .algo-box {
+    padding: 10px 20px;
+    border: 2px solid #007bff;
+    border-radius: 8px;
+    cursor: pointer;
+    user-select: none;
+    background-color: #f0f8ff;
+    transition: background-color 0.3s ease;
+  }
+  
+  .algo-box.selected {
+    background-color: #007bff;
+    color: white;
+  }
+/* styles.css */
+.marker-card {
+  background: #f0f0f0;
+  border: 1px solid #ccc;
+  margin: 5px;
+  padding: 5px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 4px;
+}
+
+#marker-card-0 {
+  background: #96b1f6;
+}
+
+.delete-btn {
+  background: red;
+  color: white;
+  border: none;
+  padding: 2px 6px;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+}
+.mid{
+  display: flex;;
+}  
+#markers{
+  width: 15vw;
+  margin-left: 10px;
+}

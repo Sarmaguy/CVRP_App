@@ -1,7 +1,8 @@
 from flask import Flask, render_template, request, jsonify
-from cvrp_algorithms.Algoritmi import clarke_wright,nearest_neighbor
+from cvrp_algorithms.Algoritmi import clarke_wright,nearest_neighbor,google
 import requests
 from config import GOOGLE_MAPS_API_KEY
+
 
 app = Flask(__name__)
 
@@ -11,38 +12,49 @@ def index():
 
 @app.route('/solve', methods=['POST'])
 def solve():
-    data = request.json
-    locations = data['locations']
-    demands   = data['demands']
-    capacity  = data['capacity']
+    try:
+        data = request.json
+        locations = data['locations']
+        demands   = data['demands']
+        capacity  = data['capacity']
+        algorithm = data['algorithm']
+        print("Received data:", data)
 
-    # Build origins/destinations string
-    od = '|'.join(f"{lat},{lng}" for lat, lng in locations)
-    resp = requests.get(
-        "https://maps.googleapis.com/maps/api/distancematrix/json",
-        params={'origins': od, 'destinations': od, 'key': GOOGLE_MAPS_API_KEY}
-    )
-    matrix_data = resp.json()
+        # Distance Matrix setup
+        od = '|'.join(f"{lat},{lng}" for lat, lng in locations)
+        resp = requests.get(
+            "https://maps.googleapis.com/maps/api/distancematrix/json",
+            params={'origins': od, 'destinations': od, 'key': GOOGLE_MAPS_API_KEY}
+        )
+        matrix_data = resp.json()
+        print("tu1")
+        if matrix_data.get('status') != 'OK':
+            return jsonify({'error': 'Distance Matrix API error', 'details': matrix_data}), 500
+        print("tu2")
+        distance_matrix = []
+        for i, row in enumerate(matrix_data['rows']):
+            dm_row = []
+            for j, elt in enumerate(row['elements']):
+                if elt.get('status') == 'OK':
+                    dm_row.append(elt['distance']['value'])
+                else:
+                    dm_row.append(float('inf'))
+            distance_matrix.append(dm_row)
+        print("tu3")
+        # Solve the CVRP
+        if algorithm == 'clarke-wright':
+            routes = clarke_wright(distance_matrix, demands, capacity)
+        elif algorithm == 'nearest':
+            routes = nearest_neighbor(distance_matrix, demands, capacity)
+        elif algorithm == 'google':
+            routes = google(distance_matrix, demands, capacity)
+        else:
+            return jsonify({'error': 'Invalid algorithm selected'}), 400
 
-    # Quick sanity check
-    if matrix_data.get('status') != 'OK':
-        return jsonify({'error': 'Distance Matrix API error', 'details': matrix_data}), 500
-
-    distance_matrix = []
-    for i, row in enumerate(matrix_data['rows']):
-        dm_row = []
-        for j, elt in enumerate(row['elements']):
-            status = elt.get('status')
-            if status == 'OK':
-                dm_row.append(elt['distance']['value'])
-            else:
-                # you can choose to fail, or set a large cost:
-                # return jsonify({'error': f'No route from {i} to {j}', 'status': status}), 400
-                dm_row.append(float('inf'))
-            # end if
-        distance_matrix.append(dm_row)
-    # end for
-
-    # Solve the CVRP
-    routes = nearest_neighbor(distance_matrix, demands, capacity)
-    return jsonify(routes)
+        print("Routes found:", routes)
+        return jsonify(routes)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print("Error during solving:", str(e))
+        return jsonify({'error': str(e)}), 500

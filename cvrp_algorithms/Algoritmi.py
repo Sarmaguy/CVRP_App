@@ -1,84 +1,90 @@
 import pulp
 import numpy as np
+from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
 
 def nearest_neighbor(distance_matrix, demands, capacity):
-    n = len(demands)  # broj kupaca (bez depoa)
-    visited = [False] * n
+    print("distance_matrix:", distance_matrix)
+    print("demands:", demands)
+    print("capacity:", capacity)
+    n_customers = len(demands)
+    unvisited = set(range(1, n_customers + 1))  # Customers are 1 to n
     routes = []
 
-    while not all(visited):
-        route = []
+    while unvisited:
+        route = [0]  # Start from depot
         load = 0
-        current = 0  # krećemo iz depoa (indeks 0)
+        current = 0
 
         while True:
             next_customer = None
             min_distance = float('inf')
 
-            for i in range(n):
-                if not visited[i] and load + demands[i] <= capacity:
-                    dist = distance_matrix[current][i + 1]  # +1 jer kupci kreću od indexa 1
+            for customer in unvisited:
+                if load + demands[customer - 1] <= capacity:
+                    dist = distance_matrix[current][customer]
                     if dist < min_distance:
                         min_distance = dist
-                        next_customer = i+1
+                        next_customer = customer
 
             if next_customer is None:
-                break  # nema više dostupnih kupaca za ovu rutu
+                break  # No feasible customer can be added, return to depot
 
             route.append(next_customer)
-            visited[next_customer-1] = True
-            load += demands[next_customer-1]
-            current = next_customer + 1  # sljedeći "trenutni" je taj kupac
+            load += demands[next_customer - 1]
+            unvisited.remove(next_customer)
+            current = next_customer
 
+        route.append(0)  # Return to depot
         routes.append(route)
 
     return routes
 
 def clarke_wright(distance_matrix, demands, capacity):
-    print(distance_matrix, demands, capacity)
-    n = len(demands)
-    routes = [[i+1] for i in range(n)]  # inicijalno: svaki kupac ima svoju rutu
-    route_loads = [demands[i] for i in range(n)]
+    from collections import deque
 
-    # Izračun ušteda: S_ij = c_0i + c_0j - c_ij
+    n = len(demands)  # number of customers
+    total_nodes = n + 1  # including depot at index 0
+
+    # Initial routes: each customer served by one vehicle
+    routes = {i + 1: deque([0, i + 1, 0]) for i in range(n)}
+    route_loads = {i + 1: demands[i] for i in range(n)}
+
+    # Compute savings
     savings = []
-    for i in range(n):
-        for j in range(i + 1, n):
-            s = distance_matrix[0][i + 1] + distance_matrix[0][j + 1] - distance_matrix[i + 1][j + 1]
-            savings.append((s, i, j))
-
-    # Sortiraj uštede silazno
+    for i in range(1, total_nodes):
+        for j in range(i + 1, total_nodes):
+            if i == j: continue
+            save = distance_matrix[i][0] + distance_matrix[0][j] - distance_matrix[i][j]
+            savings.append((save, i, j))
     savings.sort(reverse=True)
 
-    # Spoji rute na temelju najvećih ušteda
-    for s, i, j in savings:
-        route_i = None
-        route_j = None
+    # Merge routes based on savings
+    for save, i, j in savings:
+        # Find routes that contain i and j
+        ri = rj = None
+        for key, route in routes.items():
+            if route[1] == i:
+                ri = key
+            if route[-2] == j:
+                rj = key
 
-        for r in routes:
-            if r[0] == i or r[-1] == i:
-                route_i = r
-            if r[0] == j or r[-1] == j:
-                route_j = r
-
-        # Ako su već u istoj ruti ili ne postoje – preskoči
-        if route_i is None or route_j is None or route_i == route_j:
+        if ri is None or rj is None or ri == rj:
             continue
 
-        total_demand = sum(demands[k] for k in route_i + route_j)
-        if total_demand > capacity:
-            continue  # ne može se spojiti – prelazi kapacitet
+        # Check if i is at the end of its route and j at the start of its route
+        if routes[ri][-2] == i and routes[rj][1] == j:
+            load = route_loads[ri] + route_loads[rj]
+            if load <= capacity:
+                # Merge rj into ri
+                routes[ri].pop()  # remove depot at end
+                routes[rj].popleft()  # remove depot at start
+                routes[ri].extend(routes[rj])
+                route_loads[ri] = load
+                del routes[rj]
 
-        # Provjeri jesu li krajevi kompatibilni za spajanje
-        if route_i[-1] == i and route_j[0] == j:
-            route_i.extend(route_j)
-            routes.remove(route_j)
-        elif route_j[-1] == j and route_i[0] == i:
-            route_j.extend(route_i)
-            routes.remove(route_i)
-
-    return routes
+    # Return routes as list of lists
+    return [list(route) for route in routes.values()]
 
 def solve_cvrp_branch_and_cut(distance_matrix, demands, capacity):
     n = len(distance_matrix)
@@ -148,6 +154,57 @@ def solve_cvrp_branch_and_cut(distance_matrix, demands, capacity):
             routes.append(route)
 
     return routes, pulp.value(prob.objective)
+
+def google(distance_matrix, demands, vehicle_capacity):
+    # OR-Tools expects demand for every node, so prepend depot demand (0)
+    demands = [0] + demands
+    num_locations = len(distance_matrix)
+    num_vehicles = (sum(demands) + vehicle_capacity - 1) // vehicle_capacity
+    depot = 0
+
+    manager = pywrapcp.RoutingIndexManager(num_locations, num_vehicles, depot)
+    routing = pywrapcp.RoutingModel(manager)
+
+    def distance_callback(from_index, to_index):
+        from_node = manager.IndexToNode(from_index)
+        to_node = manager.IndexToNode(to_index)
+        return distance_matrix[from_node][to_node]
+
+    transit_index = routing.RegisterTransitCallback(distance_callback)
+    routing.SetArcCostEvaluatorOfAllVehicles(transit_index)
+
+    def demand_callback(from_index):
+        from_node = manager.IndexToNode(from_index)
+        return demands[from_node]
+
+    demand_index = routing.RegisterUnaryTransitCallback(demand_callback)
+    routing.AddDimensionWithVehicleCapacity(
+        demand_index,
+        0,
+        [vehicle_capacity] * num_vehicles,
+        True,
+        'Capacity'
+    )
+
+    search_params = pywrapcp.DefaultRoutingSearchParameters()
+    search_params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+
+    solution = routing.SolveWithParameters(search_params)
+
+    routes = []
+    if solution:
+        for vehicle_id in range(num_vehicles):
+            index = routing.Start(vehicle_id)
+            route = []
+            while not routing.IsEnd(index):
+                node_index = manager.IndexToNode(index)
+                route.append(node_index)
+                index = solution.Value(routing.NextVar(index))
+            node_index = manager.IndexToNode(index)
+            route.append(node_index)
+            if len(route) > 2:  # Only include non-empty routes (depot → something → depot)
+                routes.append(route)
+    return routes
 
 def calculate_total_distance(routes, distance_matrix):
     total_distance = 0
