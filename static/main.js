@@ -179,18 +179,6 @@ function createCircleElement(color, size, letter) {
   return div;
 }
 
-function addDepotCard(address = "") {
-  const container = document.getElementById("markers");
-  const card = document.createElement("div");
-  card.className = "marker-card";
-  card.id = "marker-card-0";
-  card.innerHTML = `
-    <strong>Depot</strong><br>
-    Address: ${address}<br>
-  `;
-  container.appendChild(card);
-}
-
 
 function addMarkerCard(index, demand, address = "") {
   const container = document.getElementById("markers");
