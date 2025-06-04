@@ -18,9 +18,8 @@ function initMap() {
 
   map.addListener("click", (e) => {
     const latLng = e.latLng;
-
+  
     if (!depotSet) {
-      // --- Set Depot ---
       const depotEl = createCircleElement("#000000", 28, "D");
       const depotMarker = new google.maps.marker.AdvancedMarkerElement({
         position: latLng,
@@ -28,26 +27,30 @@ function initMap() {
         element: depotEl,
         title: "Depot",
       });
-
+  
       markers.unshift(depotMarker);
       locations.unshift([latLng.lat(), latLng.lng()]);
       depotSet = true;
+  
+      reverseGeocode(latLng, (address) => {
+        addDepotCard(address, latLng);
+      });
+  
       alert("Depot set! Now click to add customers.");
       return;
     }
-
-    // --- Add Customer ---
+  
     const input = prompt("Enter demand for this customer:");
     const demand = parseInt(input, 10);
     if (isNaN(demand) || demand < 0) {
       alert("Invalid demand; please enter a non-negative integer.");
       return;
     }
-    if (demands.length == 9){
+    if (demands.length == 9) {
       alert("Google API limits the number of markers to 10 so no more customers can be added.");
       return;
     }
-
+  
     const customerIndex = demands.length + 1;
     const custEl = createCircleElement("#007bff", 24, String(demand));
     const custMarker = new google.maps.marker.AdvancedMarkerElement({
@@ -56,15 +59,16 @@ function initMap() {
       element: custEl,
       title: `Customer demand: ${demand}`,
     });
-
+  
     markers.push(custMarker);
     demands.push(demand);
     locations.push([latLng.lat(), latLng.lng()]);
+  
     reverseGeocode(latLng, (address) => {
       addMarkerCard(customerIndex, demand, address);
     });
-
   });
+  
 
 }
 
@@ -78,8 +82,6 @@ function setupAlgorithmSelector() {
     });
   });
 }
-
-
 function solveCVRP() {
   if (!depotSet) {
     alert("Please set a depot first by clicking on the map.");
@@ -92,7 +94,7 @@ function solveCVRP() {
     alert("Enter a valid truck capacity.");
     return;
   }
-
+  //return jsonify(routes=routes, distance=distance)
   fetch("/solve", {
     method: "POST",
     headers: { 'Content-Type': 'application/json' },
@@ -102,27 +104,28 @@ function solveCVRP() {
     if (!res.ok) throw new Error("Server error");
     return res.json();
   })
-  .then(routes => {
+  .then(({ routes, distance }) => {
     clearRoutes();
+  
     routes.forEach((route, i) => {
-      // Build full route: depot (0) at start and end
       const fullRoute = [0, ...route, 0];
       drawRoute(fullRoute, i);
     });
+  
+    showSolutionPopup(routes, distance);
   })
   .catch(err => {
     console.error(err);
     alert("Error solving CVRP. See console for details.");
   });
+  
 }
-
 // Clear existing directions/renderers
 function clearRoutes() {
   directionsRenderers.forEach(renderer => renderer.setMap(null));
   directionsServices = [];
   directionsRenderers = [];
 }
-
 // Draw route on map using DirectionsService
 function drawRoute(routeIndices, index) {
   const directionsService = new google.maps.DirectionsService();
@@ -156,12 +159,10 @@ function drawRoute(routeIndices, index) {
     }
   });
 }
-
 function getColor(index) {
   const colors = ['#FF0000', '#00FF00', '#0000FF', '#FF00FF', '#00FFFF'];
   return colors[index % colors.length];
 }
-
 function createCircleElement(color, size, letter) {
   const div = document.createElement("div");
   div.style.backgroundColor = color;
@@ -178,8 +179,6 @@ function createCircleElement(color, size, letter) {
   div.innerText = letter;
   return div;
 }
-
-
 function addMarkerCard(index, demand, address = "") {
   const container = document.getElementById("markers");
   const card = document.createElement("div");
@@ -205,8 +204,24 @@ function addMarkerCard(index, demand, address = "") {
   card.appendChild(deleteBtn);
   container.appendChild(card);
 }
+function addDepotCard(address, latLng) {
+  const container = document.getElementById("markers");
 
+  const card = document.createElement("div");
+  card.className = "marker-card depot-card";
 
+  const lat = latLng.lat().toFixed(5);
+  const lng = latLng.lng().toFixed(5);
+
+  const info = document.createElement("div");
+  info.innerHTML = `
+    <strong>Depot</strong><br>
+    Address: ${address}<br>
+  `;
+
+  card.appendChild(info);
+  container.prepend(card); // insert at top
+}
 function deleteMarker(index) {
   const markerIdx = index; // index in array is the same as demand order
   const marker = markers[markerIdx];
@@ -225,20 +240,27 @@ function deleteMarker(index) {
     rebuildMarkerCards();
   }
 }
-
 function rebuildMarkerCards() {
   const container = document.getElementById("markers");
   container.innerHTML = "";
 
+  // Add depot card (always at index 0)
+  if (depotSet && locations.length > 0) {
+    const depotLatLng = new google.maps.LatLng(locations[0][0], locations[0][1]);
+    reverseGeocode(depotLatLng, (address) => {
+      addDepotCard(address, depotLatLng);
+    });
+  }
+
+  // Add customer cards (start from index 1)
   for (let i = 1; i < markers.length; i++) {
     const latLng = new google.maps.LatLng(locations[i][0], locations[i][1]);
+    const demand = demands[i - 1]; // offset by 1 because depot is at 0
     reverseGeocode(latLng, (address) => {
-      addMarkerCard(i, demands[i - 1], address);
+      addMarkerCard(i, demand, address);
     });
   }
 }
-
-
 function reverseGeocode(latLng, callback) {
   const geocoder = new google.maps.Geocoder();
   geocoder.geocode({ location: latLng }, (results, status) => {
@@ -249,14 +271,93 @@ function reverseGeocode(latLng, callback) {
     }
   });
 }
+function resetMap() {
+  // 1. Remove all markers from map
+  markers.forEach(markerObj => {
+    if (markerObj && markerObj.setMap) {
+      // For AdvancedMarkerElement, setMap(null) removes it from the map
+      markerObj.setMap(null);
+    }
+  });
+
+  // 2. Reset internal data
+  markers = [];
+  demands = [];
+  locations = [];
+  depotSet = false;
+
+  // 3. Clear any drawn routes on the map
+  clearRoutes();
+
+  // 4. Clear all “cards” in the #markers container
+  const container = document.getElementById("markers");
+  if (container) {
+    container.innerHTML = "";
+  }
+
+}
+function showSolutionPopup(routes, distance) {
+  const solutionContainer = document.getElementById("solutionText");
+  solutionContainer.innerHTML = ""; // Clear previous content
+
+  if (!routes || routes.length === 0) {
+    // If there are no routes, show a message
+    const p = document.createElement("p");
+    p.innerText = "No routes found.";
+    solutionContainer.appendChild(p);
+  } else {
+    routes.forEach((route, i) => {
+      // 1. Remove any “0” entries that might have been returned by the backend.
+      //    (We want exactly one depot at start, one at end—no extras in between.)
+      const sanitized = route.filter((idx) => idx !== 0);
+
+      // 2. Build the “fullRoute” with exactly one 0 at start and one 0 at end,
+      //    unless there are no customers, in which case we show just [0].
+      let fullRoute;
+      if (sanitized.length === 0) {
+        // No customers assigned to this vehicle → show “Depot” only once
+        fullRoute = [0];
+      } else {
+        fullRoute = [0, ...sanitized, 0];
+      }
+
+      // 3. Convert indices to labels (“Depot” or “Customer N”)
+      const routeLabels = fullRoute.map((idx) =>
+        idx === 0 ? "Depot" : `Customer ${idx}`
+      );
+
+      // 4. Create a <p> element to hold “Route i: Depot → Customer X → …”
+      const p = document.createElement("p");
+      p.innerText = `Route ${i + 1}: ${routeLabels.join(" → ")}`;
+
+      // 5. Color this <p>’s text to match the map polyline color
+      //    (getColor(i) returns a hex string, e.g. “#FF0000”)
+      p.style.color = getColor(i);
+      solutionContainer.appendChild(p);
+    });
+
+    // 6. Add a summary of total distance
+    const distanceP = document.createElement("p");
+    distanceP.innerText = `Total Distance: ${(distance / 1000).toFixed(2)} km`;
+    distanceP.style.fontWeight = "bold";
+    solutionContainer.appendChild(distanceP);
 
 
 
+  }
 
+  // 6. Finally, make the popup visible
+  document.getElementById("solutionPopup").style.display = "block";
+}
+function closeSolutionPopup() {
+  document.getElementById("solutionPopup").style.display = "none";
+}
 
 window.onload = () => {
   setupAlgorithmSelector();
 };
 window.initMap = initMap;
 window.solveCVRP = solveCVRP;
+window.closeSolutionPopup = closeSolutionPopup;
+window.showSolutionPopup = showSolutionPopup;
 

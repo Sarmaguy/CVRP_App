@@ -42,17 +42,18 @@ def solve():
             distance_matrix.append(dm_row)
         print("tu3")
         # Solve the CVRP
+        distance = 0
         if algorithm == 'clarke-wright':
-            routes = clarke_wright(distance_matrix, demands, capacity)
+            routes,distance = clarke_wright(distance_matrix, demands, capacity)
         elif algorithm == 'nearest':
-            routes = nearest_neighbor(distance_matrix, demands, capacity)
+            routes, distance = nearest_neighbor(distance_matrix, demands, capacity)
         elif algorithm == 'google':
-            routes = google(distance_matrix, demands, capacity)
+            routes, distance = google(distance_matrix, demands, capacity)
         else:
             return jsonify({'error': 'Invalid algorithm selected'}), 400
 
         print("Routes found:", routes)
-        return jsonify(routes)
+        return jsonify(routes=routes, distance=distance)
     except Exception as e:
         import traceback
         traceback.print_exc()

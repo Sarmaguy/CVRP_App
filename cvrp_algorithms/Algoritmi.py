@@ -38,7 +38,7 @@ def nearest_neighbor(distance_matrix, demands, capacity):
         route.append(0)  # Return to depot
         routes.append(route)
 
-    return routes
+    return routes, calculate_total_distance(routes, distance_matrix)
 
 def clarke_wright(distance_matrix, demands, capacity):
     from collections import deque
@@ -84,7 +84,7 @@ def clarke_wright(distance_matrix, demands, capacity):
                 del routes[rj]
 
     # Return routes as list of lists
-    return [list(route) for route in routes.values()]
+    return [list(route) for route in routes.values()], calculate_total_distance(routes.values(), distance_matrix)
 
 def solve_cvrp_branch_and_cut(distance_matrix, demands, capacity):
     n = len(distance_matrix)
@@ -204,7 +204,7 @@ def google(distance_matrix, demands, vehicle_capacity):
             route.append(node_index)
             if len(route) > 2:  # Only include non-empty routes (depot → something → depot)
                 routes.append(route)
-    return routes
+    return routes, calculate_total_distance(routes, distance_matrix)
 
 def calculate_total_distance(routes, distance_matrix):
     total_distance = 0

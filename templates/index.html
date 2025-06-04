@@ -7,14 +7,29 @@
 
   </head>
   <body>
-    <h2>CVRP Solver</h2>
-    <label>Truck Capacity: <input type="number" id="capacityInput" /></label>
-    <button onclick="solveCVRP()">Solve</button>
+    
+    
     <div class="mid">
-      <div id="map" style="height: 70vh; width: 80vw;"></div>
+      <div id="map" style="height: 85vh; width: 80vw;"></div>
       <div id="markers"></div>
     </div>
-  
+
+    <div id="solutionPopup" class="popup">
+      <div class="popup-content">
+        <span class="close-btn" onclick="closeSolutionPopup()">×</span>
+        <h3>CVRP Solution</h3>
+        <div id="solutionText">
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: center; align-items: center;">
+      <label style="display: flex;align-items: center;">
+      <h2 style="margin: 14px; margin-top: 7px;">Truck Capacity: </h2><input type="number" id="capacityInput" /></label>
+      <button onclick="solveCVRP()">Solve</button>
+      <button onclick="resetMap()">Reset</button>
+    </div>
+
     <div id="algorithmSelector" class="algorithm-selector">
       <div class="algo-box selected" data-algo="nearest">Nearest Neighbour</div>
       <div class="algo-box" data-algo="clarke-wright">Clark-Wright</div>
