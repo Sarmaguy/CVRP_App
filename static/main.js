@@ -10,7 +10,7 @@ let selectedAlgorithm = "nearest"; // default
 
 function initMap() {
   map = new google.maps.Map(document.getElementById("map"), {
-    center: { lat: 37.7749, lng: -122.4194 }, // Default to San Francisco
+    center: { lat: 45.8150, lng: 15.9819 }, // Zagreb
     zoom: 12,
     disableDefaultUI: true,
     mapId: "2b36dec94b5740e749f359f5",
