@@ -7,10 +7,16 @@
 
   </head>
   <body>
+
+    <div style="display: flex; justify-content: center; align-items: center; margin: 10px;">
+      <input type="text" id="addressInput" placeholder="Enter address" style="width: 300px; margin-right: 8px;" />
+      <button onclick="addAddress()">Add Address</button>
+    </div>
+    
     
     
     <div class="mid">
-      <div id="map" style="height: 85vh; width: 80vw;"></div>
+      <div id="map"></div>
       <div id="markers"></div>
     </div>
 
@@ -34,6 +40,8 @@
       <div class="algo-box selected" data-algo="nearest">Nearest Neighbour</div>
       <div class="algo-box" data-algo="clarke-wright">Clark-Wright</div>
       <div class="algo-box" data-algo="google">Google Algorithm</div>
+      <div class="algo-box" data-algo="ant-colony">Ant Colony Algorithm</div>
+      <div class="algo-box" data-algo="exact">Exact Algorithm</div>
     </div>
     
     <script

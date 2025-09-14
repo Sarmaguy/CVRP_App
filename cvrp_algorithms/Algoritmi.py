@@ -86,75 +86,6 @@ def clarke_wright(distance_matrix, demands, capacity):
     # Return routes as list of lists
     return [list(route) for route in routes.values()], calculate_total_distance(routes.values(), distance_matrix)
 
-def solve_cvrp_branch_and_cut(distance_matrix, demands, capacity):
-    n = len(distance_matrix)
-    customers = list(range(1, n))  # depot is node 0
-    nodes = list(range(n))
-
-    # Create the problem
-    prob = pulp.LpProblem("CVRP", pulp.LpMinimize)
-
-    # Decision variables: x[i][j] = 1 if route goes from i to j
-    x = pulp.LpVariable.dicts("x", ((i, j) for i in nodes for j in nodes if i != j), cat='Binary')
-
-    # Auxiliary variables for subtour elimination (MTZ formulation)
-    u = pulp.LpVariable.dicts("u", customers, lowBound=0, upBound=capacity, cat='Continuous')
-
-    # Objective: Minimize total distance
-    prob += pulp.lpSum(distance_matrix[i][j] * x[i, j] for i in nodes for j in nodes if i != j)
-
-    # Constraints:
-
-    # 1. Each customer is entered exactly once
-    for j in customers:
-        prob += pulp.lpSum(x[i, j] for i in nodes if i != j) == 1
-
-    # 2. Each customer is exited exactly once
-    for i in customers:
-        prob += pulp.lpSum(x[i, j] for j in nodes if i != j) == 1
-
-    # 3. Vehicle must leave and return to depot
-    prob += pulp.lpSum(x[0, j] for j in customers) <= len(customers)
-    prob += pulp.lpSum(x[i, 0] for i in customers) <= len(customers)
-
-    # 4. Subtour elimination constraints (MTZ)
-    for i in customers:
-        for j in customers:
-            if i != j:
-                prob += u[i] - u[j] + capacity * x[i, j] <= capacity - demands[j - 1]  # shifted index
-
-    # 5. Load consistency
-    for i in customers:
-        prob += u[i] >= demands[i - 1]  # shifted index
-        prob += u[i] <= capacity
-
-    # Solve
-    solver = pulp.PULP_CBC_CMD(msg=True)
-    prob.solve(solver)
-
-    # Extract solution
-    routes = []
-    if pulp.LpStatus[prob.status] == 'Optimal':
-        route = [0]
-        visited = set()
-        current = 0
-        while len(visited) < len(customers):
-            for j in nodes:
-                if current != j and (current, j) in x and pulp.value(x[current, j]) > 0.5:
-                    route.append(j)
-                    if j != 0:
-                        visited.add(j)
-                    current = j
-                    if current == 0:
-                        routes.append(route)
-                        route = [0]
-                        current = 0
-                    break
-        if route != [0]:
-            routes.append(route)
-
-    return routes, pulp.value(prob.objective)
-
 def google(distance_matrix, demands, vehicle_capacity):
     # OR-Tools expects demand for every node, so prepend depot demand (0)
     demands = [0] + demands
@@ -213,6 +144,191 @@ def calculate_total_distance(routes, distance_matrix):
             total_distance += distance_matrix[route[i]][route[i + 1]]
         total_distance += distance_matrix[route[-1]][0]  # povratak u depo
     return total_distance
+
+
+def ant_colony(distance_matrix, demands, capacity, n_ants=10, n_iterations=100, alpha=1.0, beta=5.0, evaporation_rate=0.5, Q=100):
+    import random
+    n_customers = len(demands)
+    n_nodes = n_customers + 1  # including depot at index 0
+
+    pheromone = [[1.0 for _ in range(n_nodes)] for _ in range(n_nodes)]
+    best_routes = []
+    best_distance = float('inf')
+
+    def choose_next_node(current, unvisited, load):
+        probabilities = []
+        for node in unvisited:
+            if load + demands[node - 1] > capacity:
+                probabilities.append(0)
+                continue
+            tau = pheromone[current][node] ** alpha
+            eta = (1.0 / distance_matrix[current][node]) ** beta
+            probabilities.append(tau * eta)
+        total = sum(probabilities)
+        if total == 0:
+            return None
+        probabilities = [p / total for p in probabilities]
+        return random.choices(list(unvisited), weights=probabilities)[0]
+
+    def construct_solution():
+        solution = []
+        unvisited = set(range(1, n_nodes))
+        while unvisited:
+            route = [0]
+            load = 0
+            current = 0
+            while True:
+                next_node = choose_next_node(current, unvisited, load)
+                if next_node is None:
+                    break
+                route.append(next_node)
+                load += demands[next_node - 1]
+                unvisited.remove(next_node)
+                current = next_node
+            route.append(0)
+            solution.append(route)
+        return solution
+
+    for _ in range(n_iterations):
+        all_solutions = []
+        for _ in range(n_ants):
+            routes = construct_solution()
+            total_dist = calculate_total_distance(routes, distance_matrix)
+            all_solutions.append((routes, total_dist))
+            if total_dist < best_distance:
+                best_distance = total_dist
+                best_routes = routes
+
+        # Evaporation
+        for i in range(n_nodes):
+            for j in range(n_nodes):
+                pheromone[i][j] *= (1 - evaporation_rate)
+
+        # Deposit
+        for routes, dist in all_solutions:
+            for route in routes:
+                for i in range(len(route) - 1):
+                    a, b = route[i], route[i + 1]
+                    pheromone[a][b] += Q / dist
+                    pheromone[b][a] += Q / dist  # Assuming symmetric distances
+
+    return best_routes, best_distance
+
+def exact(distance_matrix, demands, capacity, time_limit=None, msg=False):
+    n = len(demands)
+    N = n + 1 # nodes including depot
+
+
+    # Indices
+    nodes = range(N)
+    customers = range(1, N)
+
+
+    # Helpers
+    def arc_list():
+        return [(i, j) for i in nodes for j in nodes if i != j]
+
+
+    arcs = arc_list()
+
+
+    # Model
+    prob = pulp.LpProblem("CVRP_exact_SCF", pulp.LpMinimize)
+
+
+    # Decision vars
+    x = pulp.LpVariable.dicts('x', (nodes, nodes), lowBound=0, upBound=1, cat=pulp.LpBinary)
+    y = pulp.LpVariable.dicts('y', (nodes, nodes), lowBound=0, cat=pulp.LpContinuous) # flow on arc (i,j)
+
+
+    # Objective
+    prob += pulp.lpSum(distance_matrix[i][j] * x[i][j] for (i, j) in arcs)
+
+
+    # No self loops
+    for i in nodes:
+        prob += x[i][i] == 0
+        prob += y[i][i] == 0
+
+    
+    for i in customers:
+        prob += pulp.lpSum(x[i][j] for j in nodes if j != i) == 1
+        prob += pulp.lpSum(x[j][i] for j in nodes if j != i) == 1
+
+
+    # Depot flow (can have multiple vehicles): balance in = out
+    prob += pulp.lpSum(x[0][j] for j in customers) == pulp.lpSum(x[j][0] for j in customers)
+
+
+    # Single-commodity flow conservation
+    total_demand = sum(demands)
+    # Depot ships total demand
+    prob += pulp.lpSum(y[0][j] for j in customers) - pulp.lpSum(y[j][0] for j in customers) == total_demand
+
+
+    for i in customers:
+    # Inflow - outflow equals demand(i)
+        prob += pulp.lpSum(y[j][i] for j in nodes if j != i) - pulp.lpSum(y[i][j] for j in nodes if j != i) == demands[i - 1]
+
+
+    # Capacity coupling: 0 <= y_ij <= Q * x_ij
+    for (i, j) in arcs:
+        prob += y[i][j] <= capacity * x[i][j]
+
+
+
+
+    # Solve
+    solver = pulp.PULP_CBC_CMD(msg=msg, timeLimit=time_limit) if time_limit else pulp.PULP_CBC_CMD(msg=msg)
+    prob.solve(solver)
+
+
+    # Extract routes
+    # Build adjacency from chosen arcs
+    adj = {i: [] for i in nodes}
+    for (i, j) in arcs:
+        if pulp.value(x[i][j]) > 0.5:
+            adj[i].append(j)
+
+
+    routes = []
+    used = set()
+
+
+    # Start a route from each arc leaving the depot
+    for j in adj[0]:
+        if j in used:
+            continue
+        route = [0, j]
+        used.add(j)
+        cur = j
+        while True:
+            nxts = [k for k in adj[cur] if k != cur] # should be exactly one
+            if not nxts:
+            # Should not happen in a feasible solution
+                break
+            nxt = nxts[0]
+            route.append(nxt)
+            if nxt == 0:
+                break
+            used.add(nxt)
+            cur = nxt
+        # Ensure route ends at depot
+        if route[-1] != 0:
+            route.append(0)
+        routes.append(route)
+
+
+    total_cost = calculate_total_distance(routes, distance_matrix)
+
+
+    status = pulp.LpStatus[prob.status]
+    prob_status = {"status": status, "objective": pulp.value(prob.objective)}
+
+
+
+    return routes, total_cost
+
 
 # distance_matrix = [
 #     [0, 47, 25, 49, 57, 23, 67, 44, 45, 20, 22, 38, 25, 29, 30, 46],

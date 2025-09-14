@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify
-from cvrp_algorithms.Algoritmi import clarke_wright,nearest_neighbor,google
+from cvrp_algorithms.Algoritmi import clarke_wright,nearest_neighbor,google,ant_colony,exact
 import requests
 from config import GOOGLE_MAPS_API_KEY
 
@@ -20,17 +20,16 @@ def solve():
         algorithm = data['algorithm']
         print("Received data:", data)
 
-        # Distance Matrix setup
         od = '|'.join(f"{lat},{lng}" for lat, lng in locations)
         resp = requests.get(
             "https://maps.googleapis.com/maps/api/distancematrix/json",
             params={'origins': od, 'destinations': od, 'key': GOOGLE_MAPS_API_KEY}
         )
         matrix_data = resp.json()
-        print("tu1")
+        #print("tu1")
         if matrix_data.get('status') != 'OK':
             return jsonify({'error': 'Distance Matrix API error', 'details': matrix_data}), 500
-        print("tu2")
+        #print("tu2")
         distance_matrix = []
         for i, row in enumerate(matrix_data['rows']):
             dm_row = []
@@ -40,8 +39,7 @@ def solve():
                 else:
                     dm_row.append(float('inf'))
             distance_matrix.append(dm_row)
-        print("tu3")
-        # Solve the CVRP
+        #print("tu3")
         distance = 0
         if algorithm == 'clarke-wright':
             routes,distance = clarke_wright(distance_matrix, demands, capacity)
@@ -49,6 +47,10 @@ def solve():
             routes, distance = nearest_neighbor(distance_matrix, demands, capacity)
         elif algorithm == 'google':
             routes, distance = google(distance_matrix, demands, capacity)
+        elif algorithm == 'ant-colony':
+            routes, distance = ant_colony(distance_matrix, demands, capacity)
+        elif algorithm == 'exact':
+            routes, distance = exact(distance_matrix, demands, capacity)
         else:
             return jsonify({'error': 'Invalid algorithm selected'}), 400
 

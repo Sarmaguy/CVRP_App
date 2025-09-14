@@ -298,45 +298,42 @@ function resetMap() {
 }
 function showSolutionPopup(routes, distance) {
   const solutionContainer = document.getElementById("solutionText");
-  solutionContainer.innerHTML = ""; // Clear previous content
+  solutionContainer.innerHTML = ""; 
 
   if (!routes || routes.length === 0) {
-    // If there are no routes, show a message
+
     const p = document.createElement("p");
     p.innerText = "No routes found.";
     solutionContainer.appendChild(p);
   } else {
     routes.forEach((route, i) => {
-      // 1. Remove any “0” entries that might have been returned by the backend.
-      //    (We want exactly one depot at start, one at end—no extras in between.)
+
       const sanitized = route.filter((idx) => idx !== 0);
 
-      // 2. Build the “fullRoute” with exactly one 0 at start and one 0 at end,
-      //    unless there are no customers, in which case we show just [0].
+
       let fullRoute;
       if (sanitized.length === 0) {
-        // No customers assigned to this vehicle → show “Depot” only once
+
         fullRoute = [0];
       } else {
         fullRoute = [0, ...sanitized, 0];
       }
 
-      // 3. Convert indices to labels (“Depot” or “Customer N”)
+
       const routeLabels = fullRoute.map((idx) =>
         idx === 0 ? "Depot" : `Customer ${idx}`
       );
 
-      // 4. Create a <p> element to hold “Route i: Depot → Customer X → …”
+
       const p = document.createElement("p");
       p.innerText = `Route ${i + 1}: ${routeLabels.join(" → ")}`;
 
-      // 5. Color this <p>’s text to match the map polyline color
-      //    (getColor(i) returns a hex string, e.g. “#FF0000”)
+
       p.style.color = getColor(i);
       solutionContainer.appendChild(p);
     });
 
-    // 6. Add a summary of total distance
+
     const distanceP = document.createElement("p");
     distanceP.innerText = `Total Distance: ${(distance / 1000).toFixed(2)} km`;
     distanceP.style.fontWeight = "bold";
@@ -346,12 +343,77 @@ function showSolutionPopup(routes, distance) {
 
   }
 
-  // 6. Finally, make the popup visible
   document.getElementById("solutionPopup").style.display = "block";
 }
 function closeSolutionPopup() {
   document.getElementById("solutionPopup").style.display = "none";
 }
+
+function addAddress() {
+  const address = document.getElementById("addressInput").value.trim();
+  if (!address) {
+    alert("Please enter an address.");
+    return;
+  }
+
+  const geocoder = new google.maps.Geocoder();
+  geocoder.geocode({ address }, (results, status) => {
+    if (status === "OK" && results[0]) {
+      const latLng = results[0].geometry.location;
+
+      // Reuse the click logic: depot first, then customers
+      if (!depotSet) {
+        const depotEl = createCircleElement("#000000", 28, "D");
+        const depotMarker = new google.maps.marker.AdvancedMarkerElement({
+          position: latLng,
+          map,
+          element: depotEl,
+          title: "Depot",
+        });
+
+        markers.unshift(depotMarker);
+        locations.unshift([latLng.lat(), latLng.lng()]);
+        depotSet = true;
+
+        addDepotCard(results[0].formatted_address, latLng);
+
+        alert("Depot set! Now add customers.");
+      } else {
+        const input = prompt("Enter demand for this customer:");
+        const demand = parseInt(input, 10);
+        if (isNaN(demand) || demand < 0) {
+          alert("Invalid demand; please enter a non-negative integer.");
+          return;
+        }
+        if (demands.length == 9) {
+          alert("Google API limits the number of markers to 10 so no more customers can be added.");
+          return;
+        }
+
+        const customerIndex = demands.length + 1;
+        const custEl = createCircleElement("#007bff", 24, String(demand));
+        const custMarker = new google.maps.marker.AdvancedMarkerElement({
+          position: latLng,
+          map,
+          element: custEl,
+          title: `Customer demand: ${demand}`,
+        });
+
+        markers.push(custMarker);
+        demands.push(demand);
+        locations.push([latLng.lat(), latLng.lng()]);
+
+        addMarkerCard(customerIndex, demand, results[0].formatted_address);
+      }
+
+      // Optionally pan to new location
+      map.panTo(latLng);
+    } else {
+      alert("Geocoding failed: " + status);
+    }
+  });
+}
+
 
 window.onload = () => {
   setupAlgorithmSelector();
@@ -360,4 +422,3 @@ window.initMap = initMap;
 window.solveCVRP = solveCVRP;
 window.closeSolutionPopup = closeSolutionPopup;
 window.showSolutionPopup = showSolutionPopup;
-
