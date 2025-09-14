@@ -1,7 +1,13 @@
 from flask import Flask, render_template, request, jsonify
 from cvrp_algorithms.Algoritmi import clarke_wright,nearest_neighbor,google,ant_colony,exact
 import requests
-from config import GOOGLE_MAPS_API_KEY
+
+import os
+
+try:
+    from config import GOOGLE_MAPS_API_KEY  # local 
+except ImportError:
+    GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")  # Render
 
 
 app = Flask(__name__)
