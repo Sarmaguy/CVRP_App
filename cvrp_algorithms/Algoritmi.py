@@ -210,7 +210,7 @@ def ant_colony(distance_matrix, demands, capacity, n_ants=10, n_iterations=100, 
                 for i in range(len(route) - 1):
                     a, b = route[i], route[i + 1]
                     pheromone[a][b] += Q / dist
-                    pheromone[b][a] += Q / dist  # Assuming symmetric distances
+                    pheromone[b][a] += Q / dist 
 
     return best_routes, best_distance
 
