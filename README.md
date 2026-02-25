@@ -6,7 +6,7 @@ A full-stack web application for solving the **Capacitated Vehicle Routing Probl
 ![Flask](https://img.shields.io/badge/Flask-3.1-lightgrey?logo=flask)
 ![Google Maps](https://img.shields.io/badge/Google%20Maps-API-green?logo=googlemaps)
 ![OR--Tools](https://img.shields.io/badge/OR--Tools-9.12-orange)
-![License](https://img.shields.io/badge/License-MIT-yellow)
+
 
 ---
 
